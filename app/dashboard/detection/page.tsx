@@ -33,6 +33,15 @@ interface OcrResults {
   processing_time: number
 }
 
+interface VehicleInfo {
+  _id: string
+  license: string
+  owner: string
+  phone: string
+  vehicleType: string
+  tollAmount: number
+}
+
 export default function DetectionPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [detectedPlate, setDetectedPlate] = useState("")
@@ -51,6 +60,8 @@ export default function DetectionPage() {
   const [processingSteps, setProcessingSteps] = useState<string[]>([])
   const [yoloResults, setYoloResults] = useState<YoloResults | null>(null)
   const [ocrResults, setOcrResults] = useState<OcrResults | null>(null)
+  const [vehicleInfo, setVehicleInfo] = useState<VehicleInfo | null>(null)
+  const [isLoadingVehicleInfo, setIsLoadingVehicleInfo] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,6 +115,38 @@ export default function DetectionPage() {
     }
   }
 
+  const fetchVehicleInfo = async (licensePlate: string): Promise<VehicleInfo | null> => {
+    try {
+      setIsLoadingVehicleInfo(true)
+      
+      const response = await fetch("/api/vehicle-info", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          license: licensePlate,
+        }),
+      })
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.log("Vehicle not found in database")
+          return null
+        }
+        throw new Error(`Failed to fetch vehicle info: ${response.status}`)
+      }
+
+      const vehicleData: VehicleInfo = await response.json()
+      return vehicleData
+    } catch (error) {
+      console.error("Error fetching vehicle info:", error)
+      return null
+    } finally {
+      setIsLoadingVehicleInfo(false)
+    }
+  }
+
   const processImageWithYoloAndOcr = async (imageUrl: string) => {
     if (!imageUrl) {
       setStatus("No image provided for processing")
@@ -119,6 +162,7 @@ export default function DetectionPage() {
     setProcessingSteps([])
     setYoloResults(null)
     setOcrResults(null)
+    setVehicleInfo(null)
     setProcessingAttempt((prev) => prev + 1)
 
     try {
@@ -201,8 +245,22 @@ export default function DetectionPage() {
         if (ocrData.license_plate) {
           setDetectedPlate(ocrData.license_plate)
           setConfidence(Math.round(ocrData.confidence * 100))
-          setStatus("✅ License plate detected successfully with YOLO + OCR!")
+          
           steps.push(`🎯 Final license plate: ${ocrData.license_plate}`)
+          steps.push("🔍 Searching database for vehicle information...")
+          setProcessingSteps([...steps])
+
+          // Step 3: Fetch vehicle information from database
+          const vehicleData = await fetchVehicleInfo(ocrData.license_plate)
+          
+          if (vehicleData) {
+            setVehicleInfo(vehicleData)
+            setStatus("✅ License plate detected and vehicle found in database!")
+            steps.push(`✅ Vehicle information found for owner: ${vehicleData.owner}`)
+          } else {
+            setStatus("✅ License plate detected but vehicle not found in database")
+            steps.push("⚠️ Vehicle not found in database - showing default information")
+          }
 
           // Parse components for display
           const parts = ocrData.license_plate.split("-")
@@ -248,6 +306,7 @@ export default function DetectionPage() {
       setProcessingSteps([])
       setYoloResults(null)
       setOcrResults(null)
+      setVehicleInfo(null)
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
       }
@@ -300,23 +359,6 @@ export default function DetectionPage() {
                 <Upload className="h-12 w-12 mx-auto mb-4 text-gray-400" />
                 <p className="text-gray-600 mb-2">Upload a Bangla license plate image</p>
                 <p className="text-sm text-gray-500 mb-4">Supports JPG, PNG, GIF up to 10MB</p>
-                <div className="text-xs text-gray-400 mb-4 space-y-1">
-                  <p>
-                    🤖 <strong>YOLO + OCR Pipeline:</strong>
-                  </p>
-                  <p>• Step 1: YOLO model detects license plate region</p>
-                  <p>• Step 2: OCR extracts text from detected region</p>
-                  <p>• Step 3: Parse and format Bangla license plate</p>
-                  <div className="mt-2 space-y-1">
-                    <p>
-                      💡 <strong>Tips for best results:</strong>
-                    </p>
-                    <p>• Use high-resolution images</p>
-                    <p>• Ensure good lighting</p>
-                    <p>• Keep license plate straight and visible</p>
-                    <p>• Avoid shadows and reflections</p>
-                  </div>
-                </div>
                 <Button onClick={triggerFileInput} variant="outline">
                   <FileImage className="h-4 w-4 mr-2" />
                   Choose Image
@@ -347,10 +389,10 @@ export default function DetectionPage() {
                 </div>
 
                 {/* Processing Progress */}
-                {isProcessing && (
+                {(isProcessing || isLoadingVehicleInfo) && (
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span>{status}</span>
+                      <span>{isLoadingVehicleInfo ? "Loading vehicle information..." : status}</span>
                       <span>{progress}%</span>
                     </div>
                     <Progress value={progress} className="h-2" />
@@ -438,23 +480,61 @@ export default function DetectionPage() {
 
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Vehicle Information</Label>
-                  <div className="p-3 bg-gray-50 rounded-lg space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Owner:</span>
-                      <span className="text-sm font-medium">Mohammad Rahman</span>
+                  {isLoadingVehicleInfo ? (
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-sm text-gray-600">Loading vehicle information...</div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Vehicle Type:</span>
-                      <span className="text-sm font-medium">Private Car</span>
+                  ) : vehicleInfo ? (
+                    <div className="p-3 bg-green-50 rounded-lg space-y-1 border border-green-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-xs font-medium text-green-700">Found in Database</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Owner:</span>
+                        <span className="text-sm font-medium">{vehicleInfo.owner}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Phone:</span>
+                        <span className="text-sm font-medium">{vehicleInfo.phone}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Vehicle Type:</span>
+                        <span className="text-sm font-medium">{vehicleInfo.vehicleType}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Toll Amount:</span>
+                        <span className="text-sm font-medium">৳{vehicleInfo.tollAmount}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Toll Amount:</span>
-                      <span className="text-sm font-medium">৳50</span>
+                  ) : (
+                    <div className="p-3 bg-yellow-50 rounded-lg space-y-1 border border-yellow-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertCircle className="h-4 w-4 text-yellow-600" />
+                        <span className="text-xs font-medium text-yellow-700">Not Found in Database</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Owner:</span>
+                        <span className="text-sm font-medium">Unknown</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Vehicle Type:</span>
+                        <span className="text-sm font-medium">Unknown</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Toll Amount:</span>
+                        <span className="text-sm font-medium">Contact Operator</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
-                <Button className="w-full">Send Payment Link</Button>
+                <Button 
+                  className={`w-full ${vehicleInfo ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-600 hover:bg-yellow-700'}`}
+                  disabled={!vehicleInfo}
+                >
+                  {vehicleInfo ? 'Send Payment Link' : 'Vehicle Not Registered'}
+                </Button>
               </div>
             ) : extractedText ? (
               <div className="space-y-4">
@@ -501,8 +581,9 @@ export default function DetectionPage() {
         </Card>
       </div>
 
+      
       {/* Processing Steps */}
-      {processingSteps.length > 0 && (
+      {/* {processingSteps.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -522,7 +603,7 @@ export default function DetectionPage() {
             </div>
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       {/* Model Results */}
       {(yoloResults || ocrResults) && (
