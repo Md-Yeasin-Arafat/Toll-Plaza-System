@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import Link from "next/link"
 
 import { useState, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -529,12 +530,25 @@ export default function DetectionPage() {
                   )}
                 </div>
 
+                
+
+              {vehicleInfo ? (
+                <Link href="/dashboard/processing">
+                  <Button 
+                    className="w-full bg-green-600 hover:bg-green-700"
+                  >
+                    Complete processing
+                  </Button>
+                </Link>
+              ) : (
                 <Button 
-                  className={`w-full ${vehicleInfo ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-600 hover:bg-yellow-700'}`}
-                  disabled={!vehicleInfo}
+                  className="w-full bg-yellow-600 hover:bg-yellow-700"
+                  disabled
                 >
-                  {vehicleInfo ? 'Send Payment Link' : 'Vehicle Not Registered'}
+                  Vehicle Not Registered
                 </Button>
+              )}
+
               </div>
             ) : extractedText ? (
               <div className="space-y-4">
@@ -582,28 +596,6 @@ export default function DetectionPage() {
       </div>
 
       
-      {/* Processing Steps */}
-      {/* {processingSteps.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Eye className="h-5 w-5" />
-              YOLO + OCR Processing Steps
-            </CardTitle>
-            <CardDescription>Step-by-step analysis using YOLO detection and OCR extraction</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {processingSteps.map((step, index) => (
-                <div key={index} className="flex items-start gap-2 p-2 bg-gray-50 rounded text-sm">
-                  <span className="text-gray-400 font-mono text-xs mt-0.5">{index + 1}.</span>
-                  <span>{step}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )} */}
 
       {/* Model Results */}
       {(yoloResults || ocrResults) && (

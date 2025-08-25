@@ -1,37 +1,33 @@
-// app/api/vehicle-info/route.ts (App Router format for Next.js 13+)
+// app/api/recent-vehicle/route.ts
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import clientPromise from '@/lib/mongodb' // Adjust path based on where your mongodb.ts file is located
 
 const DATABASE_NAME = 'tollplaza'
 const COLLECTION_NAME = 'license-plate'
 
-export async function POST(request: NextRequest) {
+export async function GET() {
   try {
-    const body = await request.json()
-    const { license } = body
-
-    if (!license) {
-      return NextResponse.json(
-        { error: 'License plate number is required' },
-        { status: 400 }
-      )
-    }
-
     // Connect to database using your existing connection
     const client = await clientPromise
     const db = client.db(DATABASE_NAME)
     const collection = db.collection(COLLECTION_NAME)
 
-    // Search for vehicle by license plate
-    const vehicle = await collection.findOne({ license: license })
+    // Find the most recent vehicle based on createdAt field
+    const recentVehicle = await collection
+      .find({})
+      .sort({ createdAt: -1 }) // Sort by createdAt in descending order (most recent first)
+      .limit(1) // Get only the most recent one
+      .toArray()
 
-    if (!vehicle) {
+    if (!recentVehicle || recentVehicle.length === 0) {
       return NextResponse.json(
-        { error: 'Vehicle not found' },
+        { error: 'No vehicles found' },
         { status: 404 }
       )
     }
+
+    const vehicle = recentVehicle[0]
 
     // Return vehicle information
     return NextResponse.json({
@@ -40,7 +36,8 @@ export async function POST(request: NextRequest) {
       owner: vehicle.owner,
       phone: vehicle.phone,
       vehicleType: vehicle.vehicleType,
-      tollAmount: vehicle.tollAmount
+      tollAmount: vehicle.tollAmount,
+      createdAt: vehicle.createdAt // MongoDB will serialize the Date object properly
     })
 
   } catch (error) {
@@ -51,5 +48,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
-
